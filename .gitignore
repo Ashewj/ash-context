@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.context/
+.env
+.env.*
+!.env.example
+*.bak-*
+auth.json
+config.toml

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Rolling Context"
+  short_description: "Preserve coding continuity as context grows"
