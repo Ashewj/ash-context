@@ -14,7 +14,7 @@ A focused Agent Skill for long coding sessions: preserve the decisions that matt
 - **256k profile setup:** an optional helper to configure Codex profiles with backups and validation.
 - **Async integration design:** snapshot history, prepare compaction in the background, then publish it with every intervening update.
 
-**Current status:** the skill and profile helper are usable today. Async transcript replacement is an integration design, not an implemented background service. Saving a checkpoint does not shrink the live model context.
+**Current status:** the skill and profile helper are usable today. The [experimental Codex runtime patch](runtime/README.md) implements background preparation and safe transcript replacement, with 12 targeted background tests and two native regression tests passed. It requires a separately built Codex fork; installing the skill does not activate it or change the desktop app. Native fallback can still pause, and compaction under ten seconds is not guaranteed.
 
 ## Install
 
@@ -88,9 +88,9 @@ sequenceDiagram
     Host-->>Agent: Candidate + every new item at next request
 ```
 
-Begin preparing around 60% measured occupancy, tuned to worker latency and tool-output growth. Keep one worker per session. Discard stale results. Publish only at a model request boundary. If preparation cannot finish before capacity runs out, use supported foreground compaction.
+The experimental runtime begins preparing at 50% of the usable context window. It keeps one worker per session, discards stale results, and publishes at a model request boundary. If preparation cannot finish before capacity runs out, it uses native foreground compaction.
 
-Read the [async runtime contract](skills/rolling-context/references/async-contract.md) for the integration requirements. OpenAI's [compaction guide](https://developers.openai.com/api/docs/guides/compaction) describes server-side and standalone API compaction; this repository does not provide an API client or custom Codex runtime.
+Read the [async runtime contract](skills/rolling-context/references/async-contract.md) for the integration requirements and the [runtime verification record](runtime/VERIFICATION.md) for completed checks and limitations. OpenAI's [compaction guide](https://developers.openai.com/api/docs/guides/compaction) describes server-side and standalone API compaction.
 
 ## Repository
 
@@ -98,6 +98,7 @@ Read the [async runtime contract](skills/rolling-context/references/async-contra
 skills/rolling-context/   Skill instructions and runtime reference
 scripts/manage_profiles.py  Install and configure profiles
 tests/                   Config preservation and installation checks
+runtime/                 Pinned Codex patch, launchers, and verification evidence
 ```
 
 ## Development
@@ -108,4 +109,4 @@ python -m unittest discover -s tests -v
 
 Contributions should demonstrate continuity under user steering, pending tool results, or context pressure. Describe whether a change implements runtime behavior or supplies agent guidance. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-MIT licensed. Repository structure draws inspiration from [Anthropic Skills](https://github.com/anthropics/skills) and [Superpowers](https://github.com/obra/superpowers); the skill and helper here are original.
+The original skill and profile helper are MIT licensed. The Codex-derived runtime patch and lockfile are supplied under Apache-2.0; see [runtime/LICENSE.codex](runtime/LICENSE.codex) and [runtime/NOTICE.codex](runtime/NOTICE.codex). Repository structure draws inspiration from [Anthropic Skills](https://github.com/anthropics/skills) and [Superpowers](https://github.com/obra/superpowers).

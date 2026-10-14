@@ -1,0 +1,322 @@
+   Compiling windows-sys v0.61.2
+   Compiling windows-sys v0.60.2
+   Compiling socket2 v0.6.3
+   Compiling serde_json v1.0.149
+   Compiling mio v1.2.0
+   Compiling windows-sys v0.59.0
+   Compiling tokio v1.52.3
+   Compiling schannel v0.1.28
+   Compiling rustls-native-certs v0.8.3
+   Compiling nu-ansi-term v0.50.3
+   Compiling dirs-sys v0.5.0
+   Compiling tokio-util v0.7.18
+   Compiling h2 v0.4.19
+   Compiling tokio-rustls v0.26.4
+   Compiling tower v0.5.3
+   Compiling tokio-stream v0.1.18
+   Compiling tokio-graceful v0.2.2
+   Compiling rama-utils v0.3.0-alpha.4
+   Compiling hyper v1.8.1
+   Compiling schemars v0.8.22
+   Compiling hyper-util v0.1.20
+   Compiling native-tls v0.2.14
+   Compiling tracing-serde v0.2.0
+   Compiling rama-core v0.3.0-alpha.4
+   Compiling hyper-rustls v0.27.7
+   Compiling tracing-subscriber v0.3.22
+   Compiling tokio-native-tls v0.3.1
+   Compiling ts-rs v11.1.0
+   Compiling tower-http v0.6.8
+   Compiling dirs v6.0.0
+   Compiling cookie_store v0.22.1
+   Compiling codex-utils-absolute-path v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\absolute-path)
+   Compiling hyper-tls v0.6.0
+   Compiling rama-http-types v0.3.0-alpha.4
+   Compiling anstyle-wincon v3.0.11
+   Compiling reqwest v0.12.28
+   Compiling rama-net v0.3.0-alpha.4
+   Compiling anstyle-query v1.1.5
+   Compiling anstream v0.6.21
+   Compiling terminal_size v0.4.3
+   Compiling clap_builder v4.5.58
+   Compiling clap v4.5.58
+   Compiling env_logger v0.11.9
+   Compiling hickory-proto v0.25.2
+   Compiling quickcheck v1.1.0
+   Compiling convert_case v0.10.0
+   Compiling hickory-resolver v0.25.2
+   Compiling derive_more-impl v2.1.1
+   Compiling sorted_vector_map v0.2.1
+   Compiling tracing-opentelemetry v0.32.1
+   Compiling error-code v3.3.2
+   Compiling pagable v0.4.1
+   Compiling codex-http-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\http-client)
+   Compiling clipboard-win v5.4.1
+   Compiling derive_more v2.1.1
+   Compiling rama-dns v0.3.0-alpha.4
+   Compiling rama-http-headers v0.3.0-alpha.4
+   Compiling codex-utils-home-dir v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\home-dir)
+   Compiling rama-http v0.3.0-alpha.4
+   Compiling lsp-types v0.97.0
+   Compiling rama-tcp v0.3.0-alpha.4
+   Compiling starlark_map v0.14.2
+   Compiling tokio-test v0.4.5
+   Compiling fd-lock v4.0.4
+   Compiling home v0.5.12
+   Compiling rustyline v14.0.0
+   Compiling rama-http-core v0.3.0-alpha.4
+   Compiling starlark_syntax v0.14.2
+   Compiling debugserver-types v0.5.0
+   Compiling image v0.25.9
+   Compiling rama-udp v0.3.0-alpha.4
+   Compiling starlark v0.14.2
+   Compiling rama-socks5 v0.3.0-alpha.4
+   Compiling rama-http-backend v0.3.0-alpha.4
+   Compiling rama-tls-rustls v0.3.0-alpha.4
+   Compiling codex-utils-path-uri v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\path-uri)
+   Compiling codex-utils-cache v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\cache)
+   Compiling codex-network-proxy v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\network-proxy)
+   Compiling codex-execpolicy v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\execpolicy)
+   Compiling codex-utils-image v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\image)
+   Compiling codex-extension-items v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\items)
+   Compiling codex-utils-redacted-string v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\redacted-string)
+   Compiling codex-async-utils v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\async-utils)
+   Compiling codex-utils-string v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\string)
+   Compiling codex-protocol v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\protocol)
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.3
+   Compiling tokio-tungstenite v0.28.0 (https://github.com/openai-oss-forks/tokio-tungstenite?rev=0e5b2d73aa18dd9f0a50ee9ff199d5aef7594186#0e5b2d73)
+   Compiling codex-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\codex-client)
+   Compiling tonic-prost v0.14.3
+   Compiling codex-utils-pty v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\pty)
+   Compiling codex-websocket-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\websocket-client)
+   Compiling opentelemetry_sdk v0.31.0
+   Compiling opentelemetry-proto v0.31.0
+   Compiling codex-api v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\codex-api)
+   Compiling opentelemetry-http v0.31.0
+   Compiling opentelemetry-otlp v0.31.0
+   Compiling opentelemetry-appender-tracing v0.31.1
+   Compiling gix-sec v0.13.2
+   Compiling os_info v3.14.0
+   Compiling gix-transport v0.55.1
+   Compiling codex-otel v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\otel)
+   Compiling gix-config v0.54.0
+   Compiling gix-protocol v0.59.0
+   Compiling gix-discover v0.49.0
+   Compiling codex-file-system v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\file-system)
+   Compiling gix v0.81.0
+   Compiling similar v2.7.0
+   Compiling codex-git-utils v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\git-utils)
+   Compiling tracing-appender v0.2.4
+   Compiling codex-windows-sandbox v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\windows-sandbox-rs)
+   Compiling codex-utils-path v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\path-utils)
+   Compiling codex-features v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\features)
+   Compiling codex-model-provider-info v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\model-provider-info)
+   Compiling aws-smithy-async v1.2.14
+   Compiling aws-smithy-runtime-api v1.12.0
+   Compiling jsonwebtoken v9.3.1
+   Compiling codex-config v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\config)
+   Compiling codex-shell-command v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\shell-command)
+   Compiling codex-install-context v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\install-context)
+   Compiling winreg v0.55.0
+   Compiling keyring v3.6.3
+   Compiling mxc_config_contract v0.8.0 (https://github.com/microsoft/mxc?rev=6cd3d58f05d3447e67109cfb75e042803b843ca4#6cd3d58f)
+   Compiling wxc_common v0.8.0 (https://github.com/microsoft/mxc?rev=6cd3d58f05d3447e67109cfb75e042803b843ca4#6cd3d58f)
+   Compiling codex-keyring-store v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\keyring-store)
+   Compiling aws-credential-types v1.2.11
+   Compiling aws-smithy-http v0.62.6
+   Compiling codex-history v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\history)
+   Compiling learning_mode_core v0.8.0 (https://github.com/microsoft/mxc?rev=6cd3d58f05d3447e67109cfb75e042803b843ca4#6cd3d58f)
+   Compiling sqlx-core v0.9.0
+   Compiling learning_mode_windows v0.8.0 (https://github.com/microsoft/mxc?rev=6cd3d58f05d3447e67109cfb75e042803b843ca4#6cd3d58f)
+   Compiling codex-secrets v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\secrets)
+   Compiling aws-smithy-http-client v1.1.12
+   Compiling aws-smithy-observability v0.1.5
+   Compiling polling v3.11.0
+   Compiling async-io v2.6.0
+   Compiling sqlx-sqlite v0.9.0
+   Compiling aws-smithy-runtime v1.9.5
+   Compiling appcontainer_common v0.8.0 (https://github.com/microsoft/mxc?rev=6cd3d58f05d3447e67109cfb75e042803b843ca4#6cd3d58f)
+   Compiling aws-types v1.3.11
+   Compiling aws-sigv4 v1.3.7
+   Compiling codex-utils-output-truncation v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\output-truncation)
+   Compiling codex-uds v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\uds)
+   Compiling codex-mxc-sandbox v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\mxc-sandbox)
+   Compiling aws-runtime v1.5.17
+   Compiling sqlx v0.9.0
+   Compiling file-id v0.2.3
+   Compiling notify v8.2.0
+   Compiling codex-state v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\state)
+   Compiling codex-agent-identity v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\agent-identity)
+   Compiling codex-build-info v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\build-info)
+   Compiling codex-workload-identity v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\workload-identity)
+   Compiling axum v0.8.8
+   Compiling codex-login v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\login)
+   Compiling codex-file-search v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\file-search)
+   Compiling codex-file-watcher v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\file-watcher)
+   Compiling codex-skills v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\skills)
+   Compiling codex-sandboxing v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\sandboxing)
+   Compiling codex-exec-server-protocol v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\exec-server-protocol)
+   Compiling codex-websocket-auth v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\websocket-auth)
+   Compiling codex-core-plugin-common v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\core-plugin-common)
+   Compiling sentry-types v0.46.1
+   Compiling codex-exec-server v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\exec-server)
+   Compiling codex-rollout v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\rollout)
+   Compiling codex-context-fragments v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\context-fragments)
+   Compiling codex-guardian-context v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\guardian-context)
+   Compiling aws-sdk-sts v1.95.0
+   Compiling sentry-core v0.46.1
+   Compiling aws-sdk-sso v1.91.0
+   Compiling aws-sdk-ssooidc v1.93.0
+   Compiling aws-sdk-signin v1.2.0
+   Compiling codex-prompts v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\prompts)
+   Compiling aws-config v1.8.12
+   Compiling sentry v0.46.1
+   Compiling schemars v1.2.1
+   Compiling codex-aws-auth v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\aws-auth)
+   Compiling codex-feedback v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\feedback)
+   Compiling codex-models-manager v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\models-manager)
+   Compiling process-wrap v10.0.0
+   Compiling oauth2 v5.0.0
+   Compiling codex-response-debug-context v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\response-debug-context)
+   Compiling reqwest v0.13.4
+   Compiling codex-model-provider v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\model-provider)
+   Compiling rmcp v3.3.0 (https://github.com/modelcontextprotocol/rust-sdk?rev=3e636cab26c013eca5131103c03d20237f12c4df#3e636cab)
+   Compiling codex-utils-plugins v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\plugins)
+   Compiling codex-plugin v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\plugin)
+   Compiling codex-code-mode-protocol v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\code-mode-protocol)
+   Compiling codex-code-mode v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\code-mode)
+   Compiling codex-connectors v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\connectors)
+   Compiling codex-rmcp-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\rmcp-client)
+   Compiling codex-tools v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\tools)
+   Compiling codex-app-server-protocol v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server-protocol)
+   Compiling codex-mcp v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\codex-mcp)
+   Compiling codex-extension-api v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\extension-api)
+   Compiling codex-analytics v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\analytics)
+   Compiling pulldown-cmark v0.10.3
+   Compiling codex-hooks v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\hooks)
+   Compiling pulldown-cmark-escape v0.10.1
+   Compiling codex-agent-message-board-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\agent-message-board)
+   Compiling codex-core-plugins v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\core-plugins)
+   Compiling codex-apply-patch v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\apply-patch)
+   Compiling codex-utils-audio v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\audio)
+   Compiling codex-agent-message-board-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\agent-message-board-client)
+   Compiling codex-thread-store v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\thread-store)
+   Compiling codex-guardian-reviewer v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\guardian-reviewer)
+   Compiling codex-skills-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\skills)
+   Compiling codex-rollout-trace v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\rollout-trace)
+   Compiling codex-agent-graph-store v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\agent-graph-store)
+   Compiling codex-agent-roles v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\agent-roles)
+   Compiling codex-memories-read v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\memories\read)
+   Compiling codex-utils-git-discovery v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\git-discovery)
+   Compiling codex-backend-openapi-models v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\codex-backend-openapi-models)
+   Compiling codex-core v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\core)
+   Compiling is_ci v1.2.0
+   Compiling unicode-width v0.2.1
+   Compiling codex-backend-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\backend-client)
+   Compiling is-terminal v0.4.17
+   Compiling owo-colors v4.3.0
+   Compiling supports-color v2.1.0
+   Compiling supports-color v3.0.2
+   Compiling castaway v0.2.4
+   Compiling darling_core v0.23.0
+   Compiling darling_macro v0.23.0
+   Compiling compact_str v0.9.1
+   Compiling unicode-truncate v2.0.1
+   Compiling strum v0.28.0
+   Compiling kasuari v0.4.12
+   Compiling instability v0.3.11
+   Compiling ratatui-core v0.1.2
+   Compiling darling v0.23.0
+   Compiling indoc v2.0.7
+   Compiling cfg_aliases v0.2.1
+   Compiling codex-utils-cli v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\cli)
+   Compiling onig_sys v69.9.1
+   Compiling deadpool v0.12.3
+   Compiling codex-connectors-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\connectors)
+   Compiling codex-shell-escalation v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\shell-escalation)
+   Compiling crossterm_winapi v0.9.1
+   Compiling line-clipping v0.3.7
+   Compiling assert-json-diff v2.0.2
+   Compiling async-stream-impl v0.3.6
+   Compiling codex-arg0 v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\arg0)
+   Compiling async-stream v0.3.6
+   Compiling wiremock v0.6.5
+   Compiling ratatui-widgets v0.3.2
+   Compiling crossterm v0.29.0 (https://github.com/openai-oss-forks/crossterm?rev=ed1cdab335221515706178d68495bba2aed1924f#ed1cdab3)
+   Compiling quinn-udp v0.5.14
+   Compiling codex-cloud-config v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\cloud-config)
+   Compiling codex-git-attribution v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\git-attribution)
+   Compiling codex-home v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\codex-home)
+   Compiling codex-user-verification v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\user-verification)
+   Compiling codex-utils-json-to-toml v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\json-to-toml)
+   Compiling quick-xml v0.39.4
+   Compiling color-spantrace v0.3.0
+   Compiling eyre v0.6.12
+   Compiling plist v1.9.0
+   Compiling onig v6.5.1
+   Compiling ratatui-crossterm v0.1.2
+   Compiling quinn v0.11.9
+   Compiling tracing-error v0.2.1
+   Compiling bincode v1.3.3
+   Compiling simdutf8 v0.1.5
+   Compiling rustc-demangle v0.1.27
+   Compiling lru-slab v0.1.2
+   Compiling quinn-proto v0.11.15
+   Compiling backtrace v0.3.76
+   Compiling ansi-to-tui v8.0.1
+   Compiling syntect v5.3.0
+   Compiling ratatui v0.30.2
+   Compiling codex-worktree v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\worktree)
+   Compiling codex-utils-sandbox-summary v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\sandbox-summary)
+   Compiling diffy v0.4.2
+   Compiling smawk v0.3.2
+   Compiling unicode-linebreak v0.1.5
+   Compiling textwrap v0.16.2
+   Compiling color-eyre v0.6.5
+   Compiling codex-ansi-escape v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ansi-escape)
+   Compiling two-face v0.5.1
+   Compiling ratatui-macros v0.7.2
+   Compiling codex-cloud-tasks-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\cloud-tasks-client)
+   Compiling codex-mermaid v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\mermaid)
+   Compiling codex-realtime-webrtc v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\realtime-webrtc)
+   Compiling codex-message-history v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\message-history)
+   Compiling codex-utils-approval-presets v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\approval-presets)
+   Compiling arboard v3.6.1
+   Compiling h3 v0.0.8 (https://github.com/hyperium/h3?rev=e07e69412876f7e26f026bd75a48b2704d8c8283#e07e6941)
+   Compiling codex-utils-sleep-inhibitor v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\sleep-inhibitor)
+   Compiling codex-utils-fuzzy-match v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\fuzzy-match)
+   Compiling codex-utils-elapsed v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\elapsed)
+   Compiling winsplit v0.1.0
+   Compiling h3-quinn v0.0.10 (https://github.com/hyperium/h3?rev=e07e69412876f7e26f026bd75a48b2704d8c8283#e07e6941)
+   Compiling codex-cloud-tasks-mock-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\cloud-tasks-mock-client)
+   Compiling codex-process-hardening v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\process-hardening)
+   Compiling codex-cli v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\cli)
+   Compiling codex-responses-api-proxy v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\responses-api-proxy)
+   Compiling codex-tcp-tunnel v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\tcp-tunnel)
+   Compiling codex-stdio-to-uds v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\stdio-to-uds)
+   Compiling clap_complete v4.5.65
+   Compiling codex-memories-write v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\memories\write)
+   Compiling codex-app-server-transport v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server-transport)
+   Compiling codex-external-agent-migration v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\external-agent-migration)
+   Compiling codex-guardian-v2 v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\guardian-v2)
+   Compiling codex-agent-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\agent)
+   Compiling codex-goal-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\goal)
+   Compiling codex-history-notes-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\history-notes)
+   Compiling codex-memories-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\memories)
+   Compiling codex-web-search-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\web-search)
+   Compiling codex-mcp-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\mcp)
+   Compiling codex-chatgpt v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\chatgpt)
+   Compiling codex-queue-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\queue)
+   Compiling codex-image-generation-extension v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ext\image-generation)
+   Compiling codex-ollama v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\ollama)
+   Compiling codex-app-server v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server)
+   Compiling codex-lmstudio v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\lmstudio)
+   Compiling codex-utils-oss v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\utils\oss)
+   Compiling codex-app-server-daemon v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server-daemon)
+   Compiling codex-app-server-test-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server-test-client)
+   Compiling codex-app-server-client v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\app-server-client)
+   Compiling codex-tui v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\tui)
+   Compiling codex-exec v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\exec)
+   Compiling codex-cloud-tasks v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\cloud-tasks)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 36m 31s

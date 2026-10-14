@@ -1,0 +1,38 @@
+{
+    "createdUtc":  "2026-10-14T01:21:25.3349763Z",
+    "upstreamTag":  "rust-v0.162.1",
+    "upstreamCommit":  "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+    "target":  "x86_64-pc-windows-msvc",
+    "buildProfile":  "dev (unoptimized)",
+    "testedWindowsVersion":  "10.0.26200",
+    "testedWindowsCaption":  "Microsoft Windows 11 Pro",
+    "testsPassed":  true,
+    "backgroundTestsPassed":  12,
+    "nativeRegressionTestsPassed":  2,
+    "fullCoreSuiteRun":  false,
+    "smokePassed":  true,
+    "smokeChecks":  [
+                        "direct --version",
+                        "direct --help",
+                        "workspace launcher --version",
+                        "workspace launcher preserves cwd and restores process flag",
+                        "portable launcher --version"
+                    ],
+    "binaryVersion":  "codex-cli 0.162.1",
+    "binarySha256":  "ED15DD36D76F731A5E3CCF2F61CCFCEAE5F2D1B9E60CE5BBFD156180E99EEB40",
+    "helperHashes":  {
+                         "codex-windows-sandbox-setup.exe":  "360F4EBBADB87C3F9F96A2F537259C9CC632E4B2D5A7D13858D63DED9CA55AB8",
+                         "codex-command-runner.exe":  "1B772ED25F4E8DE0DED16F63A8AE64439735A3465BE2795E0EC079711FD7DC01"
+                     },
+    "sourceArtifactHashes":  {
+                                 "Cargo.resolved.lock":  "765110795BF3385D734BF1ACFCAE77660D29A6C678D5B77015D7FFE49F26E69F",
+                                 "async-compaction.patch":  "637DA7E4B1484BC6A27419D1EA18939CAFB4E13B142540A3A094C45EA53EB124"
+                             },
+    "backgroundStartUsableWindowFraction":  0.5,
+    "workerTimeoutSeconds":  60,
+    "nativeFallbackRetained":  true,
+    "productionLatencyValidated":  false,
+    "productionSummaryQualityValidated":  false,
+    "windowsSandboxRuntimeValidated":  false,
+    "installedDesktopModified":  false
+}

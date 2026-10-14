@@ -1,0 +1,6 @@
+
+running 2 tests
+test session::tests::remote_compaction_v2_retains_only_the_selected_step::fallback_executes ... ok
+test session::tests::remote_compaction_v2_retains_only_the_selected_step::primary_succeeds ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2620 filtered out; finished in 0.89s

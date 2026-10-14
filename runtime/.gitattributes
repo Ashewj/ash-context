@@ -1,0 +1,2 @@
+async-compaction.patch -text -whitespace
+Cargo.resolved.lock -text

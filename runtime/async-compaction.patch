@@ -1,0 +1,1242 @@
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+index 24f2964..6412b5b 100644
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -1347,6 +1347,10 @@ impl Drop for ModelClientSession {
+ }
+ 
+ impl ModelClientSession {
++    pub(crate) fn reset_context_after_background_compaction(&mut self) {
++        self.websocket_session.reset(Some("compaction"));
++    }
++
+     pub(crate) fn inference_tools_changed(&self, tools: &Arc<[ToolSpec]>) -> bool {
+         let previous = self
+             .client
+diff --git a/codex-rs/core/src/compact_background.rs b/codex-rs/core/src/compact_background.rs
+new file mode 100644
+index 0000000..961a9d8
+--- /dev/null
++++ b/codex-rs/core/src/compact_background.rs
+@@ -0,0 +1,533 @@
++//! Experimental remote-V2 preparation concurrent with a normal turn.
++//! Publication is exclusively owned by the turn loop at a request boundary.
++
++use std::collections::HashMap;
++use std::sync::Arc;
++use std::time::Duration;
++
++use crate::compact::CompactedHistoryMetadata;
++use crate::compact::CompactionAnalyticsDetails;
++use crate::compact_remote_v2::PreparedRemoteCompaction;
++use crate::compact_remote_v2::RetainedImageBudget;
++use crate::compact_remote_v2::build_v2_compacted_history;
++use crate::compact_remote_v2::run_remote_compact_v2_snapshot_attempt;
++use crate::context::world_state::split_prefix_updates;
++use crate::context_manager::is_user_turn_boundary;
++use crate::context_manager::updates::merge_world_state_updates;
++use crate::hook_runtime::PostCompactHookOutcome;
++use crate::hook_runtime::PreCompactHookOutcome;
++use crate::hook_runtime::run_post_compact_hooks;
++use crate::hook_runtime::run_pre_compact_hooks;
++use crate::responses_metadata::CompactionTurnMetadata;
++use crate::session::session::Session;
++use crate::session::step_context::StepContext;
++use codex_analytics::CompactionImplementation;
++use codex_analytics::CompactionPhase;
++use codex_analytics::CompactionReason;
++use codex_analytics::CompactionTrigger;
++use codex_features::Feature;
++use codex_history::ResponseItemEnvelope;
++use codex_model_provider::RemoteCompactionSupport;
++use codex_protocol::error::CodexErr;
++use codex_protocol::error::Result as CodexResult;
++use codex_protocol::models::ResponseItem;
++use tokio::task::JoinHandle;
++use tokio_util::sync::CancellationToken;
++use tracing::info;
++use tracing::warn;
++
++pub(crate) struct HistorySnapshot {
++    pub(crate) items: Arc<Vec<ResponseItemEnvelope>>,
++    pub(crate) protected_start: usize,
++    pub(crate) reset: CancellationToken,
++    pub(crate) window_id: String,
++    window_number: u64,
++    window_ids: crate::state::AutoCompactWindowIds,
++    pub(crate) max_estimated_tokens: i64,
++    pub(crate) fresh_context: Vec<ResponseItemEnvelope>,
++    pub(crate) pinned_user_items: Vec<ResponseItemEnvelope>,
++}
++
++struct Pending {
++    snapshot: HistorySnapshot,
++    step: Arc<StepContext>,
++    worker: JoinHandle<CodexResult<PreparedRemoteCompaction>>,
++}
++
++#[derive(Default)]
++pub(crate) struct BackgroundCompaction {
++    pending: Option<Pending>,
++    next_start_tokens: i64,
++    attempted: bool,
++    failures: u8,
++    window_id: Option<String>,
++    #[cfg(test)]
++    pub(crate) enabled_for_test: bool,
++    #[cfg(test)]
++    pub(crate) timeout_for_test: Option<Duration>,
++}
++
++impl Drop for BackgroundCompaction {
++    fn drop(&mut self) {
++        if let Some(pending) = self.pending.take() {
++            pending.worker.abort();
++        }
++    }
++}
++
++impl BackgroundCompaction {
++    #[cfg(test)]
++    pub(crate) fn is_preparing(&self) -> bool {
++        self.pending.is_some()
++    }
++
++    pub(crate) fn cancel(&mut self) {
++        if let Some(pending) = self.pending.take() {
++            pending.worker.abort();
++        }
++        self.attempted = false;
++    }
++
++    /// Never awaits an unfinished compaction. Native hard-limit compaction is left intact.
++    pub(crate) async fn at_request_boundary(
++        &mut self,
++        sess: &Arc<Session>,
++        step: &Arc<StepContext>,
++    ) -> CodexResult<bool> {
++        self.advance(sess, step, true).await
++    }
++
++    pub(crate) async fn publish_if_ready(
++        &mut self,
++        sess: &Arc<Session>,
++        step: &Arc<StepContext>,
++    ) -> CodexResult<bool> {
++        self.advance(sess, step, false).await
++    }
++
++    async fn advance(
++        &mut self,
++        sess: &Arc<Session>,
++        step: &Arc<StepContext>,
++        allow_start: bool,
++    ) -> CodexResult<bool> {
++        if !self.enabled() || step.turn.config.features.enabled(Feature::TokenBudget) {
++            self.cancel();
++            return Ok(false);
++        }
++        let mut installed = false;
++        let window_id = sess.current_window_id().await;
++        if self
++            .window_id
++            .as_ref()
++            .is_some_and(|previous| *previous != window_id)
++        {
++            self.cancel();
++            self.failures = 0;
++            self.next_start_tokens = 0;
++        }
++        self.window_id = Some(window_id);
++        if let Some(pending) = &self.pending
++            && (pending.snapshot.reset.is_cancelled()
++                || pending.snapshot.window_id != sess.current_window().await.2.to_string()
++                || pending.step.settings.model_info != step.settings.model_info)
++        {
++            self.cancel();
++            self.next_start_tokens = 0;
++            info!("background compaction cancelled after reset or model change");
++        }
++        if self
++            .pending
++            .as_ref()
++            .is_some_and(|pending| pending.worker.is_finished())
++        {
++            let pending = self.pending.take().expect("finished background compaction");
++            // Reject settings changes as well as transcript changes. A future attempt
++            // can use the new model; never apply a candidate made for a different one.
++            let same_model = pending.step.settings.model_info == step.settings.model_info;
++            match pending.worker.await {
++                Ok(Ok(candidate)) => {
++                    if same_model {
++                        match install(sess, step, pending.snapshot, candidate).await {
++                            Ok(published) => installed = published,
++                            Err(error)
++                                if matches!(
++                                    error.details(),
++                                    codex_protocol::error::CodexErrorDetails::TurnAborted
++                                ) =>
++                            {
++                                return Err(error);
++                            }
++                            Err(error) => {
++                                warn!(%error, "background publication failed; keeping live history");
++                            }
++                        }
++                    }
++                }
++                Ok(Err(error)) => {
++                    warn!(%error, "background compaction failed; keeping live history")
++                }
++                Err(error) => {
++                    warn!(%error, "background compaction worker failed; keeping live history")
++                }
++            }
++            if installed {
++                self.failures = 0;
++            } else {
++                self.failures = self.failures.saturating_add(1);
++            }
++            self.attempted = false;
++            self.next_start_tokens = sess.get_total_token_usage().await.saturating_add(
++                step.settings
++                    .model_info
++                    .usable_context_window()
++                    .unwrap_or(0)
++                    / 10,
++            );
++            self.window_id = Some(sess.current_window_id().await);
++        }
++
++        if !allow_start
++            || self.pending.is_some()
++            || self.attempted
++            || self.failures >= 2
++            || !self.enabled()
++            || step.turn.config.features.enabled(Feature::TokenBudget)
++            || !matches!(
++                step.turn.provider.capabilities().remote_compaction,
++                RemoteCompactionSupport::V2
++            )
++            || crate::guardian::is_basic_session_source(&step.turn.session_source)
++        {
++            return Ok(installed);
++        }
++        let Some(window) = step
++            .settings
++            .model_info
++            .usable_context_window()
++            .filter(|window| *window > 0)
++        else {
++            return Ok(installed);
++        };
++        let tokens = sess.get_total_token_usage().await;
++        if tokens < window / 2 || tokens < self.next_start_tokens {
++            return Ok(installed);
++        }
++        // Hooks run on the turn owner, never concurrently inside the worker.
++        if matches!(
++            run_pre_compact_hooks(sess, &step.turn, CompactionTrigger::Auto).await,
++            PreCompactHookOutcome::Stopped
++        ) {
++            return Err(CodexErr::TurnAborted);
++        }
++        let (history, reset, window_number, window_ids) =
++            sess.background_compaction_snapshot().await;
++        let window_id = window_ids.window_id.to_string();
++        // Keep Codex's copy-on-write transcript snapshot instead of copying every
++        // message and image payload on the foreground turn.
++        let items = history.clone().into_shared_annotated_items();
++        let Some(protected_start) = protected_tail_start(&items) else {
++            return Ok(installed);
++        };
++        if protected_start == 0 {
++            return Ok(installed);
++        }
++        self.attempted = true;
++        let pinned_user_items = items[..protected_start]
++            .iter()
++            .filter(|item| is_user_turn_boundary(&item.item))
++            .rev()
++            .take(2)
++            .cloned()
++            .collect::<Vec<_>>()
++            .into_iter()
++            .rev()
++            .collect();
++        let snapshot = HistorySnapshot {
++            items,
++            protected_start,
++            reset,
++            window_id,
++            window_number,
++            window_ids,
++            max_estimated_tokens: window.saturating_mul(3) / 4,
++            fresh_context: Vec::new(),
++            pinned_user_items,
++        };
++        let worker_sess = Arc::clone(sess);
++        let worker_step = Arc::clone(step);
++        let worker_reset = snapshot.reset.clone();
++        let timeout = Duration::from_secs(60);
++        #[cfg(test)]
++        let timeout = self.timeout_for_test.unwrap_or(timeout);
++        let worker = tokio::spawn(async move {
++            let trace = worker_sess
++                .services
++                .rollout_thread_trace
++                .compaction_trace_context(
++                    worker_step.turn.sub_id.as_str(),
++                    "background",
++                    worker_step.settings.model_info.slug.as_str(),
++                    worker_step.turn.provider.info().name.as_str(),
++                );
++            let metadata = CompactionTurnMetadata::new(
++                CompactionTrigger::Auto,
++                CompactionReason::ContextLimit,
++                CompactionImplementation::ResponsesCompactionV2,
++                CompactionPhase::MidTurn,
++            );
++            let mut details = CompactionAnalyticsDetails::default();
++            let preparation = async {
++                let candidate = run_remote_compact_v2_snapshot_attempt(
++                    &worker_sess,
++                    &worker_step,
++                    None,
++                    &trace,
++                    metadata,
++                    &mut details,
++                    history,
++                )
++                .await?;
++                if let Some(usage) = &candidate.token_usage {
++                    worker_sess.record_rollout_budget_usage(usage).await?;
++                }
++                Ok(candidate)
++            };
++            // A stuck worker cannot keep the session or foreground turn alive forever.
++            tokio::select! {
++                biased;
++                _ = worker_reset.cancelled() => Err(CodexErr::TurnAborted),
++                result = tokio::time::timeout(timeout, preparation) => {
++                    match result {
++                        Ok(result) => result,
++                        Err(_) => Err(CodexErr::Fatal("background compaction timed out".to_string())),
++                    }
++                }
++            }
++        });
++        self.pending = Some(Pending {
++            snapshot,
++            step: Arc::clone(step),
++            worker,
++        });
++        info!(
++            tokens,
++            window, "background compaction preparing; foreground turn continues"
++        );
++        Ok(installed)
++    }
++
++    fn enabled(&self) -> bool {
++        #[cfg(test)]
++        if self.enabled_for_test {
++            return true;
++        }
++        std::env::var("CODEX_EXPERIMENTAL_ASYNC_COMPACTION").as_deref() == Ok("1")
++    }
++}
++
++async fn install(
++    sess: &Arc<Session>,
++    step: &Arc<StepContext>,
++    mut snapshot: HistorySnapshot,
++    candidate: PreparedRemoteCompaction,
++) -> CodexResult<bool> {
++    let (compacted_history, _) = build_v2_compacted_history(
++        candidate.prompt_input,
++        candidate.prompt_input_metadata,
++        candidate.compaction_output,
++        sess.enabled(Feature::RetainClientDeveloperMessages),
++        if sess.enabled(Feature::CompactionImageBudget) {
++            RetainedImageBudget::Enabled
++        } else {
++            RetainedImageBudget::Disabled
++        },
++    );
++    let world_state = sess.build_world_state_for_step(step, true).await?;
++    let (updates, baseline) = sess
++        .build_initial_context_with_world_state(step, &world_state)
++        .await;
++    let (prefix, context) = split_prefix_updates(updates);
++    // The preserved tail contains historic world-state deltas. Render current state
++    // after it so those historic deltas cannot override current tools or permissions.
++    snapshot.fresh_context = merge_world_state_updates(context)
++        .into_iter()
++        .map(ResponseItemEnvelope::new)
++        .collect();
++    let history = prefix
++        .into_iter()
++        .map(ResponseItemEnvelope::new)
++        .chain(compacted_history)
++        .collect();
++    let window_number = snapshot.window_number;
++    let window_ids = snapshot.window_ids;
++    let reviewer_compaction_hash = if crate::context::GuardianContextMode::from_history(
++        sess.conversation_history_snapshot().await.as_ref(),
++    ) == crate::context::GuardianContextMode::Legacy
++    {
++        let mut review_context = crate::guardian::GuardianReviewContext::from(&step.turn);
++        review_context.model_info = Arc::clone(&step.settings.model_info);
++        let (_, reviewer) = crate::guardian::resolve_review_model(sess, &review_context).await;
++        reviewer.comp_hash.clone()
++    } else {
++        None
++    };
++    let installed = sess
++        .try_replace_background_compacted_history(
++            history,
++            step.to_turn_context_item(),
++            baseline,
++            CompactedHistoryMetadata {
++                input_goal_ids: candidate.input_goal_ids,
++                message: String::new(),
++                window_number,
++                window_ids,
++                compaction_response_id: Some(candidate.compaction_response_id),
++                compaction_model_hash: step.settings.model_info.comp_hash.clone(),
++                reviewer_compaction_hash,
++            },
++            snapshot,
++        )
++        .await;
++    if installed {
++        sess.recompute_token_usage(&step.turn).await;
++        info!("background compaction installed at request boundary");
++        if matches!(
++            run_post_compact_hooks(sess, &step.turn, CompactionTrigger::Auto).await,
++            PostCompactHookOutcome::Stopped
++        ) {
++            return Err(CodexErr::TurnAborted);
++        }
++    } else {
++        info!("background compaction discarded: stale snapshot or insufficient headroom");
++    }
++    Ok(installed)
++}
++
++/// Protect recent raw items, expanding left to preserve tool-call and attached-notice pairs.
++/// Latest user directions outside this tail are separately pinned verbatim.
++pub(crate) fn protected_tail_start(items: &[ResponseItemEnvelope]) -> Option<usize> {
++    let cutoff = items.len().saturating_sub(24);
++    let mut offset = 0usize;
++    let mut start = 0usize;
++    for group in
++        crate::compact_remote_history::history_item_groups(items.iter().map(|item| &item.item))
++    {
++        let length = 1 + usize::from(group.attached_notice.is_some());
++        if offset <= cutoff && cutoff < offset + length {
++            start = offset;
++            break;
++        }
++        offset += length;
++    }
++    let mut calls = HashMap::new();
++    let mut pairs = Vec::new();
++    for (index, item) in items.iter().enumerate() {
++        match &item.item {
++            ResponseItem::FunctionCall { call_id, .. }
++            | ResponseItem::CustomToolCall { call_id, .. } => {
++                if calls.insert(call_id.as_str(), index).is_some() {
++                    return None;
++                }
++            }
++            ResponseItem::LocalShellCall {
++                call_id: Some(call_id),
++                ..
++            }
++            | ResponseItem::ToolSearchCall {
++                call_id: Some(call_id),
++                ..
++            } => {
++                if calls.insert(call_id.as_str(), index).is_some() {
++                    return None;
++                }
++            }
++            ResponseItem::FunctionCallOutput {
++                call_id: Some(call_id),
++                ..
++            }
++            | ResponseItem::ToolSearchOutput {
++                call_id: Some(call_id),
++                ..
++            }
++            | ResponseItem::CustomToolCallOutput { call_id, .. } => {
++                let call = calls.remove(call_id.as_str())?;
++                pairs.push((call, index));
++            }
++            _ => {}
++        }
++    }
++    if !calls.is_empty() {
++        return None;
++    }
++    loop {
++        let expanded = pairs
++            .iter()
++            .filter(|(_, output)| *output >= start)
++            .map(|(call, _)| *call)
++            .fold(start, usize::min);
++        if expanded == start {
++            break;
++        }
++        start = expanded;
++    }
++    Some(start)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::protected_tail_start;
++    use codex_history::ResponseItemEnvelope;
++    use serde_json::json;
++
++    fn item(value: serde_json::Value) -> ResponseItemEnvelope {
++        ResponseItemEnvelope::new(serde_json::from_value(value).expect("valid test item"))
++    }
++
++    fn messages() -> Vec<ResponseItemEnvelope> {
++        (0..40)
++            .map(|index| {
++                item(json!({
++                    "type": "message", "role": "assistant",
++                    "content": [{"type": "output_text", "text": format!("phase {index}")}]
++                }))
++            })
++            .collect()
++    }
++
++    fn call(id: &str) -> ResponseItemEnvelope {
++        item(json!({"type": "function_call", "name": "test", "arguments": "{}", "call_id": id}))
++    }
++
++    fn output(id: &str) -> ResponseItemEnvelope {
++        item(json!({"type": "function_call_output", "call_id": id, "output": "done"}))
++    }
++
++    #[test]
++    fn protects_tool_pairs_transitively_across_the_tail_boundary() {
++        let mut history = messages();
++        history[1] = call("earlier");
++        history[3] = output("earlier");
++        history[2] = call("crossing");
++        history[30] = output("crossing");
++        assert_eq!(protected_tail_start(&history), Some(1));
++    }
++
++    #[test]
++    fn rejects_unfinished_or_orphaned_tool_exchanges() {
++        let mut history = messages();
++        history[5] = call("unfinished");
++        assert_eq!(protected_tail_start(&history), None);
++        history[5] = output("orphan");
++        assert_eq!(protected_tail_start(&history), None);
++    }
++
++    #[test]
++    fn rejects_ambiguous_outstanding_call_ids() {
++        let mut history = messages();
++        history[5] = call("duplicate");
++        history[6] = call("duplicate");
++        history[30] = output("duplicate");
++        assert_eq!(protected_tail_start(&history), None);
++    }
++}
+diff --git a/codex-rs/core/src/compact_background_merge.rs b/codex-rs/core/src/compact_background_merge.rs
+new file mode 100644
+index 0000000..031093b
+--- /dev/null
++++ b/codex-rs/core/src/compact_background_merge.rs
+@@ -0,0 +1,100 @@
++//! Pure compare-and-merge logic, also executable with `rustc --test` outside the workspace.
++
++/// Preserve the protected snapshot tail and every subsequently appended item exactly once.
++/// Any edit, truncation, reset, or competing compaction makes the candidate obsolete.
++pub(crate) fn merge<T: Clone + PartialEq>(
++    snapshot: &[T],
++    live: &[T],
++    replacement: Vec<T>,
++    protected_start: usize,
++    same_identity: impl Fn(&T, &T) -> bool,
++) -> Option<Vec<T>> {
++    if protected_start > snapshot.len() || !live.starts_with(snapshot) {
++        return None;
++    }
++    let tail = &live[protected_start..];
++    let mut merged = replacement
++        .into_iter()
++        .filter(|item| !tail.iter().any(|retained| same_identity(item, retained)))
++        .collect::<Vec<_>>();
++    merged.extend_from_slice(tail);
++    Some(merged)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::merge;
++
++    #[test]
++    fn preserves_user_steering_and_tool_results_appended_during_compaction() {
++        let snapshot = vec!["old", "user", "call", "result"];
++        let live = vec![
++            "old",
++            "user",
++            "call",
++            "result",
++            "correction",
++            "new call",
++            "new result",
++        ];
++        assert_eq!(
++            merge(
++                &snapshot,
++                &live,
++                vec!["summary", "user", "result"],
++                1,
++                |a, b| a == b
++            ),
++            Some(vec![
++                "summary",
++                "user",
++                "call",
++                "result",
++                "correction",
++                "new call",
++                "new result"
++            ])
++        );
++    }
++
++    #[test]
++    fn rejects_reset_native_compaction_and_history_edits() {
++        for live in [
++            vec!["reset"],
++            vec!["other summary", "user"],
++            vec!["edited", "user"],
++        ] {
++            assert_eq!(
++                merge(&["old", "user"], &live, vec!["summary"], 1, |a, b| a == b),
++                None
++            );
++        }
++    }
++
++    #[test]
++    fn preserves_order_and_duplicate_appends_without_deduplicating_live_tail() {
++        assert_eq!(
++            merge(&[1, 2], &[1, 2, 3, 3, 4], vec![0, 2], 1, |a, b| a == b),
++            Some(vec![0, 2, 3, 3, 4])
++        );
++    }
++
++    #[test]
++    fn retained_metadata_can_change_without_duplicating_item_identity() {
++        assert_eq!(
++            merge(
++                &[(1, "old"), (2, "live")],
++                &[(1, "old"), (2, "live")],
++                vec![(0, "summary"), (2, "rewritten")],
++                1,
++                |a, b| a.0 == b.0
++            ),
++            Some(vec![(0, "summary"), (2, "live")])
++        );
++    }
++
++    #[test]
++    fn rejects_invalid_protected_boundary() {
++        assert_eq!(merge(&[1], &[1], vec![0], 2, |a, b| a == b), None);
++    }
++}
+diff --git a/codex-rs/core/src/compact_remote_v2.rs b/codex-rs/core/src/compact_remote_v2.rs
+index 6a06108..3510433 100644
+--- a/codex-rs/core/src/compact_remote_v2.rs
++++ b/codex-rs/core/src/compact_remote_v2.rs
+@@ -59,13 +59,15 @@ use futures::StreamExt;
+ #[path = "compact_remote_v2_attempt.rs"]
+ mod attempt;
+ use attempt::RemoteCompactV2Attempt;
++pub(crate) use attempt::RemoteCompactV2Attempt as PreparedRemoteCompaction;
+ use attempt::run_remote_compact_v2_attempt;
++pub(crate) use attempt::run_remote_compact_v2_snapshot_attempt;
+ 
+ #[path = "compact_remote_v2_images.rs"]
+ mod images;
+ 
+ #[derive(Clone, Copy, PartialEq, Eq)]
+-enum RetainedImageBudget {
++pub(crate) enum RetainedImageBudget {
+     Disabled,
+     Enabled,
+ }
+@@ -491,7 +493,7 @@ async fn collect_compaction_output(
+     })
+ }
+ 
+-fn build_v2_compacted_history(
++pub(crate) fn build_v2_compacted_history(
+     prompt_input: Vec<ResponseItem>,
+     prompt_input_metadata: Vec<Option<CodexHarnessMetadata>>,
+     compaction_output: ResponseItem,
+diff --git a/codex-rs/core/src/compact_remote_v2_attempt.rs b/codex-rs/core/src/compact_remote_v2_attempt.rs
+index 4df467e..4be2251 100644
+--- a/codex-rs/core/src/compact_remote_v2_attempt.rs
++++ b/codex-rs/core/src/compact_remote_v2_attempt.rs
+@@ -9,6 +9,7 @@ use crate::Prompt;
+ use crate::client::ModelClientSession;
+ use crate::compact::CompactionAnalyticsDetails;
+ use crate::compact_remote_history::trim_function_call_history_to_fit_context_window;
++use crate::context_manager::ContextManager;
+ use crate::responses_metadata::CompactionTurnMetadata;
+ use crate::session::session::Session;
+ use crate::session::step_context::StepContext;
+@@ -20,16 +21,16 @@ use codex_protocol::protocol::TokenUsage;
+ use codex_rollout_trace::CompactionTraceContext;
+ use tracing::info;
+ 
+-pub(super) struct RemoteCompactV2Attempt {
+-    pub(super) input_goal_ids: HashSet<ResponseItemId>,
+-    pub(super) trace_input_history: Option<Vec<ResponseItem>>,
+-    pub(super) prompt_input: Vec<ResponseItem>,
+-    pub(super) prompt_input_metadata: Vec<Option<CodexHarnessMetadata>>,
+-    pub(super) compaction_output: ResponseItem,
+-    pub(super) compaction_response_id: String,
+-    pub(super) token_usage: Option<TokenUsage>,
++pub(crate) struct RemoteCompactV2Attempt {
++    pub(crate) input_goal_ids: HashSet<ResponseItemId>,
++    pub(crate) trace_input_history: Option<Vec<ResponseItem>>,
++    pub(crate) prompt_input: Vec<ResponseItem>,
++    pub(crate) prompt_input_metadata: Vec<Option<CodexHarnessMetadata>>,
++    pub(crate) compaction_output: ResponseItem,
++    pub(crate) compaction_response_id: String,
++    pub(crate) token_usage: Option<TokenUsage>,
+     /// Keeps a session created for standalone compaction alive through lifecycle completion.
+-    pub(super) owned_client_session: Option<ModelClientSession>,
++    pub(crate) owned_client_session: Option<ModelClientSession>,
+ }
+ 
+ pub(super) async fn run_remote_compact_v2_attempt(
+@@ -39,9 +40,31 @@ pub(super) async fn run_remote_compact_v2_attempt(
+     compaction_trace: &CompactionTraceContext,
+     compaction_metadata: CompactionTurnMetadata,
+     analytics_details: &mut CompactionAnalyticsDetails,
++) -> CodexResult<RemoteCompactV2Attempt> {
++    run_remote_compact_v2_snapshot_attempt(
++        sess,
++        step_context,
++        client_session,
++        compaction_trace,
++        compaction_metadata,
++        analytics_details,
++        sess.clone_history().await,
++    )
++    .await
++}
++
++/// Prepare against a frozen history, without installing a replacement in the live session.
++#[allow(clippy::too_many_arguments)]
++pub(crate) async fn run_remote_compact_v2_snapshot_attempt(
++    sess: &Arc<Session>,
++    step_context: &Arc<StepContext>,
++    client_session: Option<&mut ModelClientSession>,
++    compaction_trace: &CompactionTraceContext,
++    compaction_metadata: CompactionTurnMetadata,
++    analytics_details: &mut CompactionAnalyticsDetails,
++    mut history: ContextManager,
+ ) -> CodexResult<RemoteCompactV2Attempt> {
+     let turn_context = &step_context.turn;
+-    let mut history = sess.clone_history().await;
+     let input_goal_ids = UserGoalUpdate::message_ids(history.raw_items());
+     let tools_in_history = step_context.settings.model_info.use_responses_lite
+         && history
+diff --git a/codex-rs/core/src/lib.rs b/codex-rs/core/src/lib.rs
+index a2b44e3..b2305e6 100644
+--- a/codex-rs/core/src/lib.rs
++++ b/codex-rs/core/src/lib.rs
+@@ -33,6 +33,8 @@ pub use turn_metadata::detached_memory_responses_metadata;
+ mod codex_thread;
+ mod turn_extension_data;
+ pub use turn_extension_data::WithTurnExtensionData;
++mod compact_background;
++mod compact_background_merge;
+ mod compact_model_fallback;
+ mod compact_remote_history;
+ mod compact_remote_v2;
+diff --git a/codex-rs/core/src/session/handlers.rs b/codex-rs/core/src/session/handlers.rs
+index c569b04..9928de9 100644
+--- a/codex-rs/core/src/session/handlers.rs
++++ b/codex-rs/core/src/session/handlers.rs
+@@ -299,6 +299,8 @@ pub(super) async fn shutdown_session_runtime(sess: &Arc<Session>) {
+     }
+     let _ = sess.conversation.shutdown().await;
+     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
++    let background_compaction = Arc::clone(&sess.state.lock().await.background_compaction);
++    background_compaction.lock().await.cancel();
+     let shell_snapshot_prewarm = sess.state.lock().await.shell_snapshot_prewarm.take();
+     if let Some(shell_snapshot_prewarm) = shell_snapshot_prewarm {
+         shell_snapshot_prewarm.abort();
+diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
+index bc086f8..29ff860 100644
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -1498,6 +1498,18 @@ impl Session {
+         state.get_total_token_usage(state.server_reasoning_included())
+     }
+ 
++    pub(crate) async fn background_compaction_snapshot(
++        &self,
++    ) -> (ContextManager, CancellationToken, u64, AutoCompactWindowIds) {
++        let state = self.state.lock().await;
++        (
++            state.clone_history(),
++            state.history_reset.clone(),
++            state.auto_compact_window_number(),
++            state.auto_compact_window_ids(),
++        )
++    }
++
+     pub(crate) async fn auto_compact_window_snapshot(&self) -> AutoCompactWindowSnapshot {
+         let state = self.state.lock().await;
+         state.auto_compact_window_snapshot()
+@@ -4016,11 +4028,47 @@ impl Session {
+ 
+     pub(crate) async fn replace_compacted_history(
+         &self,
+-        mut items: Vec<ResponseItemEnvelope>,
++        items: Vec<ResponseItemEnvelope>,
+         reference_context_item: TurnContextItem,
+         world_state_baseline: WorldStateSnapshot,
+         metadata: CompactedHistoryMetadata,
+     ) {
++        self.replace_compacted_history_inner(
++            items,
++            reference_context_item,
++            world_state_baseline,
++            metadata,
++            None,
++        )
++        .await;
++    }
++
++    pub(crate) async fn try_replace_background_compacted_history(
++        &self,
++        items: Vec<ResponseItemEnvelope>,
++        reference_context_item: TurnContextItem,
++        world_state_baseline: WorldStateSnapshot,
++        metadata: CompactedHistoryMetadata,
++        snapshot: crate::compact_background::HistorySnapshot,
++    ) -> bool {
++        self.replace_compacted_history_inner(
++            items,
++            reference_context_item,
++            world_state_baseline,
++            metadata,
++            Some(snapshot),
++        )
++        .await
++    }
++
++    async fn replace_compacted_history_inner(
++        &self,
++        mut items: Vec<ResponseItemEnvelope>,
++        reference_context_item: TurnContextItem,
++        world_state_baseline: WorldStateSnapshot,
++        mut metadata: CompactedHistoryMetadata,
++        snapshot: Option<crate::compact_background::HistorySnapshot>,
++    ) -> bool {
+         for envelope in &mut items {
+             Self::assign_missing_response_item_id(&mut envelope.item);
+         }
+@@ -4051,6 +4099,71 @@ impl Session {
+         let world_state_item = WorldStateItem::full(world_state_baseline.clone().into_object());
+         let compacted_item = {
+             let mut state = self.state.lock().await;
++            if let Some(snapshot) = snapshot {
++                if snapshot.reset.is_cancelled()
++                    || state.auto_compact_window_ids().window_id.to_string() != snapshot.window_id
++                {
++                    info!("background candidate rejected: context generation changed");
++                    return false;
++                }
++                if crate::compact_background::protected_tail_start(state.history.annotated_items())
++                    .is_none()
++                {
++                    info!("background candidate rejected: incomplete tool exchange");
++                    return false;
++                }
++                items.retain(|item| {
++                    !snapshot.pinned_user_items.iter().any(|pin| {
++                        match (item.item.id(), pin.item.id()) {
++                            (Some(item), Some(pin)) => item == pin,
++                            _ => item == pin,
++                        }
++                    })
++                });
++                items.extend(snapshot.pinned_user_items);
++                let Some(mut merged) = crate::compact_background_merge::merge(
++                    &snapshot.items,
++                    state.history.annotated_items(),
++                    items,
++                    snapshot.protected_start,
++                    |left, right| match (left.item.id(), right.item.id()) {
++                        (Some(left), Some(right)) => left == right,
++                        _ => left == right,
++                    },
++                ) else {
++                    info!("background candidate rejected: transcript prefix changed");
++                    return false;
++                };
++                for mut context in snapshot.fresh_context {
++                    Self::assign_missing_response_item_id(&mut context.item);
++                    merged.push(context);
++                }
++                // Use the host's existing coarse estimate conservatively. This is not an
++                // exact token counter; native hard-limit handling remains enabled.
++                let old_estimate = state
++                    .history
++                    .annotated_items()
++                    .iter()
++                    .map(|item| crate::context_manager::estimate_item_token_count(&item.item))
++                    .fold(0i64, i64::saturating_add);
++                let new_estimate = merged
++                    .iter()
++                    .map(|item| crate::context_manager::estimate_item_token_count(&item.item))
++                    .fold(0i64, i64::saturating_add);
++                if new_estimate >= old_estimate.saturating_mul(9) / 10
++                    || new_estimate > snapshot.max_estimated_tokens
++                {
++                    info!(
++                        old_estimate,
++                        new_estimate,
++                        maximum = snapshot.max_estimated_tokens,
++                        "background candidate rejected: insufficient estimated savings or headroom"
++                    );
++                    return false;
++                }
++                items = merged;
++                (metadata.window_number, metadata.window_ids) = state.advance_auto_compact_window();
++            }
+             // Goal edits are published outside the running task. Keep edits accepted after
+             // the compaction input snapshot, in their original order, after its replacement.
+             let replacement_goal_ids = crate::context::UserGoalUpdate::message_ids(
+@@ -4122,6 +4235,7 @@ impl Session {
+             let mut state = self.state.lock().await;
+             state.queue_pending_session_start_source(codex_hooks::SessionStartSource::Compact);
+         }
++        true
+     }
+ 
+     pub fn enabled(&self, feature: Feature) -> bool {
+diff --git a/codex-rs/core/src/session/tests.rs b/codex-rs/core/src/session/tests.rs
+index 496114a..cf0d818 100644
+--- a/codex-rs/core/src/session/tests.rs
++++ b/codex-rs/core/src/session/tests.rs
+@@ -11979,6 +11979,219 @@ enum FirstAttempt {
+     Retries,
+ }
+ 
++#[test_case(false, false, false; "publishes_without_losing_appended_tail")]
++#[test_case(true, false, false; "rejects_reset_racing_the_worker")]
++#[test_case(false, true, false; "remote_failure_preserves_live_history")]
++#[test_case(false, false, true; "timeout_preserves_live_history")]
++#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
++async fn compact_background_keeps_foreground_progress(
++    stale: bool,
++    remote_failure: bool,
++    times_out: bool,
++) {
++    let _ = tracing_subscriber::fmt()
++        .with_env_filter("codex_core::compact_background=info,codex_core::session=info")
++        .try_init();
++    let server = responses::start_mock_server().await;
++    let mut provider = built_in_model_providers(None)["openai"].clone();
++    provider.base_url = Some(format!("{}/v1", server.uri()));
++    provider.supports_websockets = false;
++    provider.request_max_retries = Some(0);
++    provider.stream_max_retries = Some(0);
++    let (session, turn, _events) = make_session_and_context_with_auth_and_config_and_rx(
++        CodexAuth::create_dummy_chatgpt_auth_for_testing(),
++        Vec::new(),
++        |config| {
++            config.model = Some("gpt-5.2".to_string());
++            config.model_context_window = Some(100_000);
++            config.model_provider = provider;
++            config.chatgpt_base_url = server.uri();
++            let _ = config.features.disable(Feature::TokenBudget);
++        },
++    )
++    .await;
++    let response = ResponseTemplate::new(if remote_failure { 500 } else { 200 })
++        .insert_header("content-type", "text/event-stream")
++        .set_delay(Duration::from_secs(2))
++        .set_body_string(responses::sse(vec![
++            json!({"type": "response.output_item.done", "item": {
++                "type": "compaction", "encrypted_content": "BACKGROUND_SUMMARY"
++            }}),
++            responses::ev_completed("background-response"),
++        ]));
++    let requests = responses::mount_response_once(&server, response).await;
++    let mut items = vec![user_message("Keep my uncommitted changes; do not deploy.")];
++    items.extend(
++        (0..60).map(|index| {
++            assistant_message(&format!("Completed phase {index}: {}", "x".repeat(4000)))
++        }),
++    );
++    session
++        .record_conversation_items(&turn, turn.model_info(), &items)
++        .await;
++    session.recompute_token_usage(&turn).await;
++    let step = session
++        .capture_speculative_step_context(Arc::clone(&turn), &CancellationToken::new())
++        .await
++        .expect("capture step");
++    let controller = Arc::clone(&session.state.lock().await.background_compaction);
++    controller.lock().await.enabled_for_test = true;
++    if times_out {
++        controller.lock().await.timeout_for_test = Some(Duration::from_millis(500));
++    }
++    let initial_window = session.current_window_id().await;
++    let before = session.clone_history().await.annotated_items().to_vec();
++    assert!(
++        session.get_total_token_usage().await
++            >= step
++                .settings
++                .model_info
++                .usable_context_window()
++                .expect("window")
++                / 2,
++        "fixture below threshold: tokens={}, window={:?}",
++        session.get_total_token_usage().await,
++        step.settings.model_info.usable_context_window()
++    );
++    assert!(!step.turn.config.features.enabled(Feature::TokenBudget));
++    assert!(matches!(
++        step.turn.provider.capabilities().remote_compaction,
++        codex_model_provider::RemoteCompactionSupport::V2
++    ));
++
++    // A 2-second remote worker must not hold this foreground request boundary.
++    assert!(
++        !timeout(
++            Duration::from_millis(750),
++            controller.lock().await.at_request_boundary(&session, &step)
++        )
++        .await
++        .expect("foreground waited on worker")
++        .expect("start preparation")
++    );
++    assert!(
++        controller.lock().await.is_preparing(),
++        "worker never started"
++    );
++    assert_eq!(
++        session.clone_history().await.annotated_items(),
++        before.as_slice()
++    );
++    if stale {
++        session
++            .replace_history(
++                vec![user_message("New objective replaces the old task.")],
++                None,
++            )
++            .await;
++    } else {
++        session
++            .record_conversation_items(
++                &turn,
++                turn.model_info(),
++                &[
++                    user_message("Correction: use the existing branch."),
++                    assistant_message("Foreground work finished while compaction was pending."),
++                ],
++            )
++            .await;
++    }
++    let live_tail = session.clone_history().await.annotated_items().to_vec();
++    assert!(
++        !timeout(
++            Duration::from_millis(750),
++            controller.lock().await.at_request_boundary(&session, &step)
++        )
++        .await
++        .expect("foreground waited on pending worker")
++        .expect("continue work")
++    );
++    assert_eq!(
++        session.clone_history().await.annotated_items(),
++        live_tail.as_slice()
++    );
++
++    if remote_failure || times_out {
++        timeout(Duration::from_secs(10), async {
++            loop {
++                let mut background = controller.lock().await;
++                assert!(
++                    !background
++                        .at_request_boundary(&session, &step)
++                        .await
++                        .expect("poll failure")
++                );
++                if !background.is_preparing() {
++                    break;
++                }
++                drop(background);
++                sleep(Duration::from_millis(20)).await;
++            }
++        })
++        .await
++        .expect("failed worker never retired");
++        assert_eq!(
++            session.clone_history().await.annotated_items(),
++            live_tail.as_slice()
++        );
++        assert_eq!(session.current_window_id().await, initial_window);
++    } else if stale {
++        assert_eq!(session.current_window_id().await, initial_window);
++        assert_eq!(
++            session.clone_history().await.annotated_items(),
++            live_tail.as_slice()
++        );
++    } else {
++        let publication = timeout(Duration::from_secs(15), async {
++            loop {
++                if controller
++                    .lock()
++                    .await
++                    .at_request_boundary(&session, &step)
++                    .await
++                    .expect("publish candidate")
++                {
++                    break;
++                }
++                sleep(Duration::from_millis(20)).await;
++            }
++        })
++        .await;
++        assert!(
++            publication.is_ok(),
++            "candidate never installed: preparing={}, requests={}",
++            controller.lock().await.is_preparing(),
++            requests.requests().len()
++        );
++        let installed = session.clone_history().await;
++        assert_ne!(session.current_window_id().await, initial_window);
++        for expected in live_tail.iter().rev().take(24) {
++            assert_eq!(
++                installed
++                    .annotated_items()
++                    .iter()
++                    .filter(|item| item.item.id() == expected.item.id())
++                    .count(),
++                1
++            );
++        }
++        assert!(
++            installed
++                .raw_items()
++                .any(|item| matches!(item, ResponseItem::Compaction { .. }))
++        );
++        assert!(installed.annotated_items().len() < before.len());
++        assert!(installed.raw_items().any(|item| {
++            matches!(item, ResponseItem::Message { role, content, .. }
++                if role == "user" && content.iter().any(|part|
++                    matches!(part, ContentItem::InputText { text }
++                        if text == "Keep my uncommitted changes; do not deploy.")))
++        }));
++        assert_eq!(requests.requests().len(), 1);
++    }
++    controller.lock().await.cancel();
++}
++
+ async fn make_remote_compaction_session(
+     server_uri: &str,
+ ) -> (
+diff --git a/codex-rs/core/src/session/turn.rs b/codex-rs/core/src/session/turn.rs
+index 64e8786..1142805 100644
+--- a/codex-rs/core/src/session/turn.rs
++++ b/codex-rs/core/src/session/turn.rs
+@@ -421,6 +421,7 @@ pub(crate) async fn run_turn(
+ 
+     let mut next_step_context = Some(first_step_context);
+     let mut guardian_budget_compacted = false;
++    let background_compaction = Arc::clone(&sess.state.lock().await.background_compaction);
+     loop {
+         // Note that pending_input would be something like a message the user
+         // submitted through the UI while the model was running. Though the UI
+@@ -520,6 +521,15 @@ pub(crate) async fn run_turn(
+                 .await;
+ 
+             // Construct the input that we will send to the model.
++            if background_compaction
++                .lock()
++                .await
++                .at_request_boundary(&sess, &step_context)
++                .await?
++            {
++                // Clear the primary connection's continuation after a context replacement.
++                client_session.reset_context_after_background_compaction();
++            }
+             let sampling_request_input: Vec<ResponseItem> = async {
+                 sess.clone_history()
+                     .await
+@@ -1440,6 +1450,20 @@ async fn run_auto_compact(
+     phase: CompactionPhase,
+ ) -> CodexResult<()> {
+     let turn_context = &step_context.turn;
++    // A prepared candidate can satisfy the capacity fallback without another
++    // remote request. Never start or wait for a worker at this hard boundary.
++    let background = Arc::clone(&sess.state.lock().await.background_compaction);
++    let mut background = background.lock().await;
++    if matches!(reason, CompactionReason::ContextLimit)
++        && background
++            .publish_if_ready(sess, &replacement_step_context)
++            .await?
++    {
++        client_session.reset_context_after_background_compaction();
++        return Ok(());
++    }
++    background.cancel();
++    drop(background);
+     if matches!(phase, CompactionPhase::PreTurn)
+         && crate::guardian::is_basic_session_source(&turn_context.session_source)
+         && !crate::guardian::should_compact_guardian_input(sess)?
+diff --git a/codex-rs/core/src/state/session.rs b/codex-rs/core/src/state/session.rs
+index 53857e1..846340c 100644
+--- a/codex-rs/core/src/state/session.rs
++++ b/codex-rs/core/src/state/session.rs
+@@ -27,6 +27,8 @@ use codex_protocol::protocol::TokenUsage;
+ use codex_protocol::protocol::TokenUsageInfo;
+ use codex_protocol::protocol::TokenUsageRecord;
+ use codex_protocol::protocol::TurnContextItem;
++use std::sync::Arc;
++use tokio::sync::Mutex;
+ use tokio_util::sync::CancellationToken;
+ use tokio_util::task::AbortOnDropHandle;
+ 
+@@ -74,6 +76,8 @@ pub(crate) struct SessionState {
+     pub(crate) history: ContextManager,
+     /// Cancels work bound to discarded history or a superseded Guardian evidence policy.
+     pub(crate) history_reset: CancellationToken,
++    /// Preparation survives normal turn completion; session shutdown cancels it.
++    pub(crate) background_compaction: Arc<Mutex<crate::compact_background::BackgroundCompaction>>,
+     pub(crate) latest_rate_limits: Option<RateLimitSnapshot>,
+     pub(crate) latest_token_usage_record: Option<TokenUsageRecord>,
+     pub(crate) server_reasoning_included: bool,
+@@ -126,6 +130,7 @@ impl SessionState {
+             base_instructions_provenance: None,
+             history,
+             history_reset: CancellationToken::new(),
++            background_compaction: Arc::default(),
+             latest_rate_limits: None,
+             latest_token_usage_record: None,
+             server_reasoning_included: false,

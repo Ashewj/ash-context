@@ -1,0 +1,27 @@
+   Compiling codex-core v0.162.1 (C:\dev\async-context-compaction\codex\codex-rs\core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11m 07s
+     Running unittests src\lib.rs (target\debug\deps\codex_core-f3fdcea3c2bf081d.exe)
+
+running 12 tests
+test compact_background_merge::tests::rejects_invalid_protected_boundary ... ok
+test compact_background_merge::tests::rejects_reset_native_compaction_and_history_edits ... ok
+test compact_background_merge::tests::preserves_order_and_duplicate_appends_without_deduplicating_live_tail ... ok
+test compact_background_merge::tests::preserves_user_steering_and_tool_results_appended_during_compaction ... ok
+test compact_background_merge::tests::retained_metadata_can_change_without_duplicating_item_identity ... ok
+test compact_background::tests::rejects_ambiguous_outstanding_call_ids ... ok
+test compact_background::tests::rejects_unfinished_or_orphaned_tool_exchanges ... ok
+test compact_background::tests::protects_tool_pairs_transitively_across_the_tail_boundary ... ok
+2026-10-14T00:42:11.480602Z  INFO codex_core::compact_background: background compaction preparing; foreground turn continues tokens=65606 window=95000
+2026-10-14T00:42:11.480602Z  INFO codex_core::compact_background: background compaction preparing; foreground turn continues tokens=65606 window=95000
+2026-10-14T00:42:11.480602Z  INFO codex_core::compact_background: background compaction preparing; foreground turn continues tokens=65606 window=95000
+2026-10-14T00:42:11.480602Z  INFO codex_core::compact_background: background compaction preparing; foreground turn continues tokens=65606 window=95000
+2026-10-14T00:42:11.481129Z  INFO codex_core::compact_background: background compaction cancelled after reset or model change
+test session::tests::compact_background_keeps_foreground_progress::rejects_reset_racing_the_worker ... ok
+2026-10-14T00:42:12.005929Z  WARN codex_core::compact_background: background compaction failed; keeping live history error=Fatal error: background compaction timed out
+test session::tests::compact_background_keeps_foreground_progress::timeout_preserves_live_history ... ok
+2026-10-14T00:42:13.541198Z  WARN codex_core::compact_background: background compaction failed; keeping live history error=We’re currently experiencing high demand, which may cause temporary errors.
+test session::tests::compact_background_keeps_foreground_progress::remote_failure_preserves_live_history ... ok
+2026-10-14T00:42:13.550865Z  INFO codex_core::compact_background: background compaction installed at request boundary
+test session::tests::compact_background_keeps_foreground_progress::publishes_without_losing_appended_tail ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 2610 filtered out; finished in 3.33s

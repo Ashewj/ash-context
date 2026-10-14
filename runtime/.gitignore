@@ -1,0 +1,13 @@
+/codex/
+/.toolchain/
+/dist/
+/.verification/*
+!/.verification/build-evidence.json
+!/.verification/package-check.json
+!/.verification/smoke-results.json
+!/.verification/cargo-tests-resumed.log
+!/.verification/native-regressions-final.log
+!/.verification/cargo-build-verified.log
+!/.verification/test-exit.txt
+!/.verification/build-exit.txt
+!/.verification/portable-smoke.log
